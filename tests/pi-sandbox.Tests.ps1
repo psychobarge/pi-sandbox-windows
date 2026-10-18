@@ -10,7 +10,7 @@ BeforeAll {
 Describe 'protected paths' {
   BeforeAll {
     $root = Get-CanonicalPath (New-Item -ItemType Directory "$TestDrive\work").FullName
-    $repo = (New-Item -ItemType Directory "$root\pi-sandbox-wsl").FullName
+    $repo = (New-Item -ItemType Directory "$root\pi-sandbox-windows").FullName
     New-Item -ItemType Directory "$repo\sub" | Out-Null
     New-Item -ItemType Directory "$root\other" | Out-Null
     $prot = Get-ProtectedPaths $repo
@@ -22,9 +22,9 @@ Describe 'protected paths' {
     Test-Protected ($root.Substring(0, 2)) $prot | Should -BeTrue   # drive root
   }
   It 'allows a sibling, even one sharing the name prefix' {
-    New-Item -ItemType Directory "$root\pi-sandbox-wsl-2" | Out-Null
+    New-Item -ItemType Directory "$root\pi-sandbox-windows-2" | Out-Null
     Test-Protected "$root\other" $prot | Should -BeFalse
-    Test-Protected "$root\pi-sandbox-wsl-2" $prot | Should -BeFalse
+    Test-Protected "$root\pi-sandbox-windows-2" $prot | Should -BeFalse
   }
   It 'ignores case' {
     Test-Protected $repo.ToUpperInvariant() $prot | Should -BeTrue

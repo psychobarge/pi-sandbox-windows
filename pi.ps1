@@ -33,7 +33,7 @@ try {
   foreach ($entry in $ALLOWED) {
     $d = Resolve-AllowedEntry $entry
     if (-not (Test-DriveLetterPath $d)) { Write-Host "⚠ skipping $entry (not a X:\ path)"; continue }
-    if (Test-Protected $d $PROTECTED) { Write-Host "⚠ skipping $entry (is, is inside, or contains pi-sandbox-wsl or a launcher/profile folder)"; continue }
+    if (Test-Protected $d $PROTECTED) { Write-Host "⚠ skipping $entry (is, is inside, or contains pi-sandbox-windows or a launcher/profile folder)"; continue }
     $ALLOWED_OK += $d
   }
 
@@ -51,7 +51,7 @@ try {
     $START_REL = $LAUNCH.Substring($START_DIR.Length).TrimStart('\')
     $WORKDIR = if ($START_REL) { "$CTX/$($START_REL -replace '\\', '/')" } else { $CTX }
   } else {
-    if (Test-Protected $LAUNCH $PROTECTED) { Write-Host "❌ refusing to mount ${LAUNCH}: it is, is inside, or contains pi-sandbox-wsl or a launcher/profile folder"; exit 1 }
+    if (Test-Protected $LAUNCH $PROTECTED) { Write-Host "❌ refusing to mount ${LAUNCH}: it is, is inside, or contains pi-sandbox-windows or a launcher/profile folder"; exit 1 }
     if (-not (Test-DriveLetterPath $LAUNCH)) { Write-Host "❌ refusing to mount ${LAUNCH}: only X:\ paths can be mounted"; exit 1 }
     Write-Host "⚠ $LAUNCH is not in ALLOWED (pi.config.ps1)"
     $ans = Read-Host 'Add this folder to ALLOWED and launch confined to it? [y/N]'

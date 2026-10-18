@@ -29,6 +29,7 @@ Mise à niveau sécurité au niveau de pi-sandbox 1.1.0 (macOS).
   mises à jour pour toujours).
 
 ### Changed
+- Projet renommé `pi-sandbox-windows` (il n'utilise pas WSL directement : seul Docker Desktop s'en sert).
 - `pi.config.ps1` ignoré par git, créé depuis `pi.config.example.ps1`.
 - `install.ps1` ne réécrit plus `settings.json` (extensions conservées) ;
   l'opt-in DeepSeek fusionne au lieu d'écraser. Les extensions sont installées

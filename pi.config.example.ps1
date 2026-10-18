@@ -3,7 +3,7 @@
 # (gitignored) on first run — edit that copy, never commit your real config.
 
 # Allowed folders: the container sees ONLY these. Windows paths (E:\...).
-# Never list pi-sandbox-wsl itself, a folder inside it, or a parent of it
+# Never list pi-sandbox-windows itself, a folder inside it, or a parent of it
 # (E:\, your user profile): the agent could rewrite pi.ps1 / pi.config.ps1 and
 # get them run on the host. pi.ps1 skips such entries.
 # - Launched from inside one -> confined to that folder, mounted at its real

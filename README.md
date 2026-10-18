@@ -1,4 +1,4 @@
-# pi-sandbox-wsl 1.1.0
+# pi-sandbox-windows 1.1.0
 
 > Lance l'agent de codage [pi](https://github.com/earendil-works/pi-mono) dans un
 > conteneur Docker isolé sur Windows — **directement depuis PowerShell**, comme
@@ -35,7 +35,7 @@ versions de pi et de rtk et reconstruit l'image en arrière-plan si besoin.
 ## Installation
 
 ```powershell
-cd "E:\DEV perso\Other projects\pi-sandbox-wsl"
+cd "E:\DEV perso\Other projects\pi-sandbox-windows"
 .\install.ps1
 ```
 
@@ -60,7 +60,7 @@ $API_KEYS = @("TAVILY_API_KEY", "OPENAI_API_KEY")
 $DOCKER_ARGS = @("-e", "PI_SKIP_VERSION_CHECK=1")
 ```
 
-Ne liste **jamais** pi-sandbox-wsl, un de ses sous-dossiers ou un parent (`E:\`,
+Ne liste **jamais** pi-sandbox-windows, un de ses sous-dossiers ou un parent (`E:\`,
 ton profil) : `pi.ps1` les ignore, comme les dossiers de profil PowerShell et
 `~\.pi\bin`. Les chemins sont comparés sans tenir compte de la casse, après
 résolution des junctions, noms courts (`DEVPER~1`) et lecteurs `subst`.
