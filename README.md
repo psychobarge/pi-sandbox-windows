@@ -1,170 +1,134 @@
 # pi-sandbox-windows 1.1.0
 
-> Lance l'agent de codage [pi](https://github.com/earendil-works/pi-mono) dans un
-> conteneur Docker isolé sur Windows — **directement depuis PowerShell**, comme
-> sur mac. L'agent ne voit **que les dossiers que tu listes** — jamais ton
-> profil, `~\.ssh`, `~\.pi\agent` de l'hôte, ni la valeur de tes clés API.
-> Il a des limites : voir [ce que la sandbox ne protège pas](#ce-que-la-sandbox-ne-protège-pas).
+Run the [pi](https://github.com/earendil-works/pi-mono) coding agent in a
+Docker container on Windows. The agent sees **only the folders you allow** —
+not your user profile, not `~\.ssh`, not your host `~\.pi\agent`, and never
+your API keys. It has limits: see
+[what the sandbox does not protect](#what-the-sandbox-does-not-protect).
 
-Port Windows/PowerShell de pi-sandbox (macOS/OrbStack). Tout ce qui suit
-`.\install.ps1` est automatique : chaque lancement de `pi` vérifie les nouvelles
-versions de pi et de rtk et reconstruit l'image en arrière-plan si besoin.
+Windows / PowerShell port of [pi-sandbox](https://github.com/psychobarge/pi-sandbox)
+(macOS), at the same security level.
 
-## Prérequis
+## Quick start
 
-- **Docker Desktop** (Windows), backend WSL2 par défaut. Vérifie dans
-  *Settings → General* que **« Expose daemon on tcp://localhost:2375 without
-  TLS » est désactivé** : activé, le conteneur pourrait piloter Docker, donc l'hôte.
-- **PowerShell 5.1** (préinstallé) ou PowerShell 7. Pas besoin d'ouvrir WSL.
-
-## Fichiers
-
-| Fichier | Rôle |
-|---------|------|
-| `Dockerfile.pi` | Image : Node 24 + pi + git + ripgrep + Python + rtk (hash SHA-256 vérifié) |
-| `install.ps1` | Setup : image, config, hook rtk, clés API, launcher |
-| `pi.ps1` | Lance le conteneur (+ sidecar keyproxy), vérifie les mises à jour |
-| `update-pi-sandbox.ps1` | Suit pi et rtk, repinne les hashes, reconstruit l'image |
-| `pi.config.example.ps1` | Modèle de config ; copié en `pi.config.ps1` (ignoré par git) au 1er lancement |
-| `lib/pi-sandbox.ps1` | Fonctions partagées (chemins protégés, clés, lock…) |
-| `proxy/keyproxy.mjs` | Sidecar qui ajoute les vraies clés aux requêtes sortantes |
-| `config/settings*.json` | Défauts pi (extensions, modèle DeepSeek si opt-in) |
-| `config/models.json` | URLs des providers via keyproxy, monté en lecture seule |
-| `tests/` | Tests Pester |
-
-## Installation
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) and
+PowerShell 5.1 (preinstalled) or 7. In Docker Desktop → *Settings → General*,
+keep **"Expose daemon on tcp://localhost:2375 without TLS" off**: on, the
+container could drive Docker, and so your PC.
 
 ```powershell
-cd "E:\DEV perso\Other projects\pi-sandbox-windows"
+cd pi-sandbox-windows
 .\install.ps1
 ```
 
-L'installeur construit l'image, initialise le volume `pi-agent-home` (sans
-écraser un `settings.json` existant), installe le hook rtk, propose DeepSeek,
-**demande tes clés API** (saisie masquée, stockées dans le Gestionnaire
-d'identifiants Windows) et installe le launcher `pi` dans `%USERPROFILE%\.pi\bin`
-(`pi.cmd` pour cmd/PowerShell, `pi` pour Git Bash). Ouvre un **nouveau** terminal ensuite.
+The installer builds the image, asks for your API keys (stored in Windows
+Credential Manager) and installs the `pi` command (cmd, PowerShell and Git
+Bash). Open a new terminal, then, from any project:
 
-Les extensions déclarées dans `config/settings.json` sont installées par pi au
-premier lancement. Relancer `.\install.ps1` conserve celles ajoutées avec `!pi install`.
+```powershell
+cd E:\my-project
+pi
+```
+
+The first time, pi asks to add the folder to the allowed list. Answer `y`.
+That's it.
 
 ## Configuration
 
-Tout vit dans `pi.config.ps1` (chemins **Windows**) :
+Everything lives in `pi.config.ps1` (created from `pi.config.example.ps1`, gitignored):
 
 ```powershell
-$ALLOWED = @(                      # dossiers que le conteneur peut voir
-  "E:\DEV perso\Other projects\mon-projet"
+$ALLOWED = @(                 # folders the agent may see
+  "E:\my-project"
 )
-$API_KEYS = @("TAVILY_API_KEY", "OPENAI_API_KEY")
-$DOCKER_ARGS = @("-e", "PI_SKIP_VERSION_CHECK=1")
+$API_KEYS = @("DEEPSEEK_API_KEY", "OPENAI_API_KEY", "TAVILY_API_KEY")
 ```
 
-Ne liste **jamais** pi-sandbox-windows, un de ses sous-dossiers ou un parent (`E:\`,
-ton profil) : `pi.ps1` les ignore, comme les dossiers de profil PowerShell et
-`~\.pi\bin`. Les chemins sont comparés sans tenir compte de la casse, après
-résolution des junctions, noms courts (`DEVPER~1`) et lecteurs `subst`.
+Edit it, quit pi (`Ctrl-D`) and relaunch. Sessions, settings and extensions are
+kept across launches.
 
-## Clés API
-
-Stockées dans le **Gestionnaire d'identifiants Windows**, cible
-`pi-sandbox:<NOM>`. Pour ajouter ou changer une clé, relance `.\install.ps1`
-(une clé déjà présente est gardée : supprime-la d'abord avec
-`cmdkey /delete:pi-sandbox:OPENAI_API_KEY`). N'utilise jamais
-`cmdkey /pass:<clé>` : la clé finirait dans l'historique.
-
-Au lancement, DeepSeek / OpenAI / Tavily ne vont qu'au sidecar keyproxy : pi
-reçoit la valeur `proxy`, le sidecar ajoute la vraie clé aux requêtes vers ces
-3 API. Les clés ne passent jamais dans la ligne de commande de `docker.exe`.
-
-Une variable définie dans le shell courant (`$env:OPENAI_API_KEY = …`) l'emporte
-sur le Gestionnaire, pour un lancement. **N'utilise plus `setx`** : la clé est
-alors en clair dans le registre et héritée par tous les process ; `pi.ps1`
-avertit si une clé y est encore.
-
-Limite : contrairement au Trousseau macOS, tout programme lancé sous ton compte
-peut lire un identifiant générique. Le gain porte sur le registre en clair,
-l'héritage par tous les process et la fuite vers l'agent, pas sur un malware local.
-
-## Utilisation
+To add or change a key later, delete it then re-run the installer, which asks
+for it with hidden input:
 
 ```powershell
-pi   # depuis PowerShell, cmd ou Git Bash
+cmdkey /delete:pi-sandbox:OPENAI_API_KEY
+.\install.ps1
 ```
 
-- **Dans un dossier autorisé** → seul ce dossier est monté, à son chemin réel
-  (`E:\...` apparaît en `/e/...` dans le conteneur).
-- **Ailleurs** → `y` ajoute le dossier à `$ALLOWED` et relance confiné, `n`
-  monte tous les dossiers autorisés sous `/workspace/<nom>` (`api`, `api-2` si
-  deux dossiers ont le même nom ; un dossier absent est ignoré).
+Never use `cmdkey /pass:<key>`: the key would land in your shell history.
 
-Les montages sont figés au démarrage : édite `pi.config.ps1`, quitte (`Ctrl-D`), relance.
+A key set in your shell (`$env:OPENAI_API_KEY = …`) **overrides Credential
+Manager** for that launch. Never store keys with `setx`: they sit in plain text
+in the registry and every program you start inherits them. pi warns you if one
+is still there. **Use Credential Manager to keep your keys secure.**
 
 ## Extensions
+
+Install them from inside a pi session, then reload:
 
 ```
 !pi install npm:@author/package
 /reload
 ```
 
-Elles persistent dans le volume `pi-agent-home` et tournent avec les droits de
-l'agent : n'installe que des sources de confiance.
+Extensions run with the agent's permissions: only install what you trust.
 
-## Mises à jour
+[pi-llama-cpp](https://pi.dev/packages/pi-llama-cpp) is installed by default:
+it reaches a llama.cpp server running on Windows at
+`http://host.docker.internal:8083` (`llamaServerUrl` in `config/settings.json`).
 
-Automatiques : à chaque lancement, `pi.ps1` compare les versions de pi et rtk
-embarquées aux dernières publiées et reconstruit l'image en arrière-plan
-(`logs\update-<date>.log`). Le hash de rtk est repinné depuis son
-`checksums.txt` ; sans hash, pas de mise à jour. Manuel :
+## Updates
 
-```powershell
-.\update-pi-sandbox.ps1           # reconstruit maintenant
-.\update-pi-sandbox.ps1 -Status   # up-to-date ou stale:<quoi>
-```
-
-## Modèles locaux (llama.cpp)
-
-L'extension [pi-llama-cpp](https://pi.dev/packages/pi-llama-cpp) accède à
-llama.cpp sur l'hôte via `host.docker.internal:8083` (voir `llamaServerUrl`
-dans `config/settings.json`). Autre URL : `"-e", "LLAMA_SERVER_URL=…"` dans
-`$DOCKER_ARGS` (ce n'est pas un secret, pas dans `$API_KEYS`).
-
-`llama-server --host 0.0.0.0` l'expose aussi à ton réseau local ; garde le
-pare-feu Windows actif pour ce port.
-
-## Ce que la sandbox ne protège pas
-
-- **Les fichiers des dossiers autorisés** sont lisibles : `.env`, tokens,
-  identifiants. Garde tes secrets ailleurs.
-- **Les clés peuvent être dépensées**, y compris chez un autre provider
-  proxifié que celui du modèle choisi. Ne garde que les clés utiles et fixe un
-  plafond de dépense sur chacune.
-- **Les clés sans route** (autres que DeepSeek, OpenAI, Tavily) sont passées
-  en clair à l'agent ; `pi.ps1` l'affiche au lancement.
-- **N'utilise jamais `/login` dans pi** : la clé serait enregistrée là où l'agent la lit.
-- **Les services de l'hôte** restent joignables via `host.docker.internal`
-  (llama.cpp, mais aussi tout autre serveur local).
-- **Les fichiers écrits peuvent s'exécuter sur l'hôte** : hooks git,
-  `core.fsmonitor` dans `.git/config`, `.vscode/tasks.json`, scripts npm,
-  `.ps1` / `.bat`. Piège : `core.fsmonitor` est exécuté par le simple
-  `git status` que lance un prompt posh-git / oh-my-posh en entrant dans le
-  dossier. Relis les changements de l'agent avant de lancer quoi que ce soit.
-
-## Tests
+Automatic. Each launch checks for new pi and rtk releases and rebuilds the
+image in the background; relaunch to use it. To update right away:
 
 ```powershell
-Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck   # Windows n'a que Pester 3.4
-Invoke-Pester .\tests
-node .\proxy\keyproxy.mjs --selftest
+.\update-pi-sandbox.ps1
 ```
 
-## Dépannage
+## How it works
 
-| Problème | Solution |
-|----------|----------|
-| `failed to connect ... docker` | Démarre Docker Desktop, attends le vert, relance |
-| `⚠ skipping …` | Le dossier est le repo, un parent ou un dossier de profil : choisis un sous-dossier de projet |
-| `⚠ folder not found: ...` | Corrige le chemin dans `$ALLOWED` |
-| Provider non authentifié | `cmdkey /list` doit montrer `pi-sandbox:<NOM>` ; sinon relance `.\install.ps1` |
-| `--network … conflicts with keyproxy` | Retire `--network` de `$DOCKER_ARGS` |
-| Launcher `pi` inconnu | Ouvre un nouveau terminal, ou relance `.\install.ps1` |
+- **Isolation** — only the folders in `ALLOWED` are mounted, at their real path
+  (`E:\x` appears as `/e/x`). pi's data lives in Docker volumes, never in your
+  host `~\.pi`. The repo itself, its parents, the launchers and your PowerShell
+  profiles are never mounted.
+- **Keys stay outside** — the container only sees the value `proxy`. A small
+  sidecar ([`proxy/keyproxy.mjs`](proxy/keyproxy.mjs)) adds the real key to
+  requests sent to DeepSeek, OpenAI and Tavily **(only these 3 for now)**. The
+  agent can use a key but not read it.
+- **Fewer tokens** — [rtk](https://github.com/rtk-ai/rtk) compresses the output
+  of shell commands.
+
+WSL is not used directly: only Docker Desktop runs its engine there.
+
+## What the sandbox does not protect
+
+- **Files in allowed folders** are readable: `.env`, tokens, credentials. Keep
+  secrets out of them.
+- **Keys can be spent.** The agent could call any proxied provider, whatever
+  model you picked: with a DeepSeek and an OpenAI key, a session on a DeepSeek
+  model can still call the OpenAI API. **This is true of pi without the sandbox
+  too** (there it can even read the keys). Keep only the keys you use and set a
+  spending cap on each.
+- **Keys without a proxy route** (anything other than DeepSeek, OpenAI, Tavily)
+  are passed to the agent as plain env vars. pi warns you at launch.
+- **Never use `/login` in pi**: it saves the key where the agent can read it.
+- **Credential Manager is not a vault**: unlike the macOS Keychain, any program
+  running under your account can read a generic credential.
+- **Host services** stay reachable through `host.docker.internal` (llama.cpp,
+  but also any other local server).
+- **Written files can run on your PC**: git hooks, `core.fsmonitor` in
+  `.git/config` (run by the `git status` of a posh-git / oh-my-posh prompt as
+  soon as you `cd` into the folder), `.vscode/tasks.json`, npm scripts,
+  `.ps1` / `.bat`… Review the agent's changes before running anything.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| `failed to connect to the docker API` | Start Docker Desktop |
+| `⚠ folder not found` | Fix the path in `ALLOWED` |
+| `⚠ skipping …` | The folder is the repo, a parent of it, or a profile folder: pick a project folder |
+| pi doesn't see a folder | Add it to `ALLOWED`, then relaunch |
+| Provider not authenticated | `cmdkey /list` should show `pi-sandbox:<KEY>` |
+| `pi` not recognized | Open a new terminal, or re-run `.\install.ps1` |
