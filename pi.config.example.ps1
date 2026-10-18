@@ -16,12 +16,33 @@ $ALLOWED = @(
 # API keys forwarded to the container. Resolved in this order: variable set in
 # the current PowerShell process (one-off override), else Windows Credential
 # Manager (target "pi-sandbox:<NAME>", stored by install.ps1).
-# DEEPSEEK/OPENAI/TAVILY go through the keyproxy sidecar: the container only
-# sees the value "proxy". Any OTHER key here has no route and is handed to pi
-# as a real env var, readable by the agent.
+# Every key below goes through the keyproxy sidecar: the container only sees
+# the value "proxy". Any OTHER key has no route and is handed to pi as a real
+# env var, readable by the agent. Keep only the keys you use: the agent can
+# spend any of them (see README). Uncomment one, then re-run .\install.ps1 to
+# store it in Credential Manager.
 $API_KEYS = @(
   "TAVILY_API_KEY"
   "OPENAI_API_KEY"
+  # "DEEPSEEK_API_KEY"
+  # "ANTHROPIC_API_KEY"
+  # "GEMINI_API_KEY"
+  # "GROQ_API_KEY"
+  # "CEREBRAS_API_KEY"
+  # "XAI_API_KEY"
+  # "MISTRAL_API_KEY"
+  # "TOGETHER_API_KEY"
+  # "NVIDIA_API_KEY"
+  # "HF_TOKEN"
+  # "MOONSHOT_API_KEY"
+  # "ZAI_API_KEY"
+  # "KIMI_API_KEY"
+  # "MINIMAX_API_KEY"
+  # "BASETEN_API_KEY"
+  # "META_API_KEY"
+  # "XIAOMI_API_KEY"
+  # "ANT_LING_API_KEY"
+  # "QWEN_TOKEN_PLAN_API_KEY"
 )
 
 # Image and volume (volume = sessions/config/extensions, persists across launches)

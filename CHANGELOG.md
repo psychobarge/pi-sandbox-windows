@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Added
+- keyproxy routes for 18 more of pi's providers (same `keyproxy.mjs` as
+  pi-sandbox): Anthropic, Google Gemini, Groq, Cerebras, xAI, Mistral,
+  Together, NVIDIA, Hugging Face, Moonshot, Z.ai, Kimi Coding, MiniMax,
+  Baseten, Meta, Xiaomi, Ant Ling and Qwen Token Plan. Each route sends the
+  key in the header its provider reads (`Authorization: Bearer`, `x-api-key`
+  or `x-goog-api-key`) and drops the others, and `config/models.json` points
+  each provider at its route.
+- `pi.config.example.ps1` lists every proxied key (commented out).
+
+### Changed
+- `lib/pi-sandbox.ps1` reads the proxied key names from `proxy/keyproxy.mjs`,
+  so adding a route no longer needs an edit in the launcher.
+  `keyproxy.mjs --selftest` fails if `config/models.json` and the routes
+  disagree.
+
 ## [1.0.0] — 2026-10-18
 
 Initial release: Windows / PowerShell port of

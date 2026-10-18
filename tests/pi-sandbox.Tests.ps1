@@ -110,6 +110,11 @@ Describe 'API keys' {
     $r.EnvArgs | Should -Contain 'DEEPSEEK_API_KEY=proxy'
     $r.EnvArgs | Should -Contain 'TAVILY_BASE_URL=http://keyproxy:8787/tavily'
   }
+  It 'proxies every key routed in keyproxy.mjs' {
+    $PI_PROXY_ROUTES | Should -Contain 'ANTHROPIC_API_KEY'
+    $PI_PROXY_ROUTES | Should -Contain 'GEMINI_API_KEY'
+    $PI_PROXY_ROUTES.Count | Should -Be 21
+  }
   It 'passes keys without a route by name and does not start the proxy' {
     $r = Resolve-ApiKeys @('PI_TEST_OTHER_KEY')
     $r.Proxied | Should -BeFalse

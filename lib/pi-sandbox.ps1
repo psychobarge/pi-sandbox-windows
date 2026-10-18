@@ -71,8 +71,11 @@ namespace PiSandbox {
 }
 
 $PI_CRED_PREFIX = 'pi-sandbox:'
-# Keys with a keyproxy route (proxy/keyproxy.mjs): the real value goes to the sidecar only.
-$PI_PROXY_ROUTES = @('DEEPSEEK_API_KEY', 'OPENAI_API_KEY', 'TAVILY_API_KEY')
+# Keys with a keyproxy route: the real value goes to the sidecar only. Read from
+# the ROUTES of proxy/keyproxy.mjs, so a new route needs no edit here. -ErrorAction
+# Stop: without the table every key would fall through to "exposed".
+$PI_PROXY_ROUTES = @(Select-String -LiteralPath "$PSScriptRoot\..\proxy\keyproxy.mjs" -Pattern "env: '([A-Z_]+)'" -ErrorAction Stop |
+  ForEach-Object { $_.Matches[0].Groups[1].Value })
 
 # PS 5.1 native-arg quoting: args containing spaces must carry embedded quotes.
 # The scripts set $PSNativeCommandArgumentPassing = 'Legacy' so PS 7.3+ behaves the same.
