@@ -1,4 +1,4 @@
-# pi-sandbox-windows 1.1.0
+# pi-sandbox-windows 1.0.0
 
 Run the [pi](https://github.com/earendil-works/pi-mono) coding agent in a
 Docker container on Windows. The agent sees **only the folders you allow** —

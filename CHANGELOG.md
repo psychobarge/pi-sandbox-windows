@@ -1,53 +1,43 @@
 # Changelog
 
-## [1.1.0] — 2026-10-18
+All notable changes to this project are documented here.
 
-Mise à niveau sécurité au niveau de pi-sandbox 1.1.0 (macOS).
+## [1.0.0] — 2026-10-18
 
-> **À faire après la mise à jour** : stocker les clés avec `.\install.ps1`,
-> supprimer les variables `setx`
-> (`[Environment]::SetEnvironmentVariable('<NOM>', $null, 'User')`), puis
-> **faire la rotation** des clés DeepSeek / OpenAI / Tavily : elles ont
-> transité en clair (ligne de commande de docker, environnement du conteneur,
-> registre) et peuvent figurer dans les transcripts du volume `pi-agent-home`.
+Initial release: Windows / PowerShell port of
+[pi-sandbox](https://github.com/psychobarge/pi-sandbox) 1.1.0 (macOS), at the
+same security level.
 
-### Security
-- `pi.ps1` refuse de monter le repo, un de ses sous-dossiers ou un parent, ainsi
-  que `~\.pi\bin`, les profils PowerShell 5.1/7 et le dossier Démarrage : l'agent
-  pouvait réécrire `pi.ps1` / `pi.config.ps1`, exécutés sur l'hôte au lancement
-  suivant. Chemins résolus (junctions, noms 8.3, `subst`) et comparés sans casse.
-- Un dossier ajouté à `$ALLOWED` est écrit entre quotes simples échappées : un
-  dossier nommé `x$(calc)` exécutait `calc` à chaque lancement.
-- Clés API dans le Gestionnaire d'identifiants Windows au lieu de `setx`, jamais
-  dans la ligne de commande de `docker.exe`, retirées de l'environnement du shell
-  à la sortie.
-- Sidecar keyproxy : DeepSeek, OpenAI et Tavily ne voient que la valeur `proxy`
-  dans le conteneur. Réseau privé par session, sidecar durci, orphelins supprimés
-  (propriétaire = PID + heure de démarrage).
-- rtk vérifié par SHA-256 (`v1.0.1`), hashes repinnés par l'updater.
-- Lock de l'updater récupéré s'il est orphelin (un updater tué désactivait les
-  mises à jour pour toujours).
-
-### Changed
-- Projet renommé `pi-sandbox-windows` (il n'utilise pas WSL directement : seul Docker Desktop s'en sert).
-- `pi.config.ps1` ignoré par git, créé depuis `pi.config.example.ps1`.
-- `install.ps1` ne réécrit plus `settings.json` (extensions conservées) ;
-  l'opt-in DeepSeek fusionne au lieu d'écraser. Les extensions sont installées
-  par pi depuis `config/settings.json`.
-- `IMAGE` / `VOLUME` / `RTK_VOLUME` lus depuis la config partout.
-- L'updater suit pi et rtk, garde `Dockerfile.pi` en UTF-8, supprime
-  l'ancienne image par ID, ne bloque jamais plus de 2 s par sonde.
-- Image : Python ajouté ; caches dans le volume (`XDG_CACHE_HOME`).
-- Settings alignés : `npm:@dietrichgebert/ponytail`, `npm:pi-deepseek-peak`,
-  modèle `deepseek-flash`.
-
-### Fixed
-- Dossier courant reconnu sans tenir compte de la casse (doublons dans `$ALLOWED`).
-- Un dossier manquant dans `$ALLOWED` est ignoré au lieu de bloquer le lancement ;
-  deux dossiers de même nom ne se masquent plus.
-- `pi.ps1` / `install.ps1` ne changent plus le dossier courant du shell appelant.
-- PowerShell 7.3+ : passage d'arguments forcé en mode `Legacy`.
-
-## [0.1.1]
-
-Portage PowerShell de pi-sandbox 0.1.1.
+### Added
+- `install.ps1`: checks/starts Docker Desktop, builds the image, seeds
+  `settings.json` in the `pi-agent-home` volume (never overwrites an existing
+  one, so installed extensions are kept), installs the rtk hook, asks for the
+  API keys (hidden input, stored in Windows Credential Manager) and installs the
+  `pi` launcher for cmd, PowerShell and Git Bash.
+- DeepSeek opt-in: merges the DeepSeek defaults (`deepseek-flash`,
+  `pi-deepseek-peak`) into `settings.json` and adds `DEEPSEEK_API_KEY` to
+  `$API_KEYS`. Packages installed from git by earlier setups are replaced by
+  their npm versions.
+- `pi.ps1`: launches pi confined to the allowed folder it is run from (whitelist
+  prompt elsewhere, all allowed folders mounted on "n"), with tool caches kept
+  in the volume. Missing folders are skipped and same-name folders get a suffix.
+- Protected paths: the repo, a folder inside it or containing it, `~\.pi\bin`,
+  PowerShell 5.1/7 profiles and the Startup folder are never mounted. Paths are
+  resolved (junctions, 8.3 names, `subst`) and compared case-insensitively.
+- Folders added to `$ALLOWED` are written as escaped single-quoted strings, so
+  a folder name can never run code from the dot-sourced config.
+- API keys: read from the current shell (one-off override), else Credential
+  Manager. Never on docker's command line, removed from the shell's environment
+  on exit, with a warning when a key is still stored with `setx`.
+- keyproxy sidecar: DeepSeek, OpenAI and Tavily keys stay in the sidecar, the
+  container only sees `proxy`. Private network per session, hardened container
+  without published ports, orphans of closed windows removed (owner = PID +
+  start time). `config/models.json` is mounted read-only.
+- `update-pi-sandbox.ps1`: tracks pi and rtk releases, repins rtk's SHA-256
+  hashes from its `checksums.txt`, rebuilds in the background, removes the
+  previous image by ID, recovers an orphan lock and keeps `Dockerfile.pi` in UTF-8.
+- `Dockerfile.pi`: Node 24 (trixie) with pi, git, ripgrep, Python and rtk
+  (download verified by SHA-256).
+- Default extensions: ponytail, pi-web-access, pi-plan-mode, pi-ask-mode,
+  pi-llama-cpp (llama.cpp on the host via `host.docker.internal`).
+- Pester tests (`tests\`) and keyproxy self-test.
