@@ -1,26 +1,35 @@
-# node:24-trixie (glibc 2.41) ??? rtk's aarch64 Linux build requires glibc >= 2.39 (bookworm has 2.36)
+# node:24-trixie (glibc 2.41) — rtk's aarch64 Linux build requires glibc >= 2.39 (bookworm has 2.36)
 FROM node:24-trixie-slim
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends bash ca-certificates curl git ripgrep \
+       python3 python3-pip python3-venv python-is-python3 \
   && rm -rf /var/lib/apt/lists/*
 
-# rtk ??? Rust Token Killer (compresses bash output for the agent).
-# Pin to a release; bump deliberately. x86_64 ships musl (static), aarch64 ships gnu.
-ARG RTK_VERSION=v0.44.2
+# rtk — Rust Token Killer (compresses bash output for the agent).
+# Pin to a release; update-pi-sandbox.ps1 bumps this and rebuilds the image.
+# Default edition (Apache-2.0 + BUSL-1.1): it keeps the compression engine that
+# rtk-oss drops. x86_64 ships musl (static), aarch64 ships gnu.
+ARG RTK_VERSION=v1.0.1
+# SHA-256 of each release tarball, from that release's checksums.txt. A tag is
+# movable, so update-pi-sandbox.ps1 repins these together with RTK_VERSION; the
+# build verifies the download against them (see the sha256sum check below).
+ARG RTK_SHA256_X86_64=5b919c3bccb799b67a61866d0e617410a4fcdf173e2614440e59de2fa2003436
+ARG RTK_SHA256_AARCH64=cd627c4091ad90b5e5aca83ca5af66ee4b8aa8537a736533fa90544f461f1c2b
 RUN case "$(uname -m)" in \
-       x86_64)  TARGET=x86_64-unknown-linux-musl ;; \
-       aarch64) TARGET=aarch64-unknown-linux-gnu ;; \
+       x86_64)  TARGET=x86_64-unknown-linux-musl; SHA="${RTK_SHA256_X86_64}" ;; \
+       aarch64) TARGET=aarch64-unknown-linux-gnu; SHA="${RTK_SHA256_AARCH64}" ;; \
        *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;; \
      esac \
   && curl -fsSL -o /tmp/rtk.tar.gz \
      "https://github.com/rtk-ai/rtk/releases/download/${RTK_VERSION}/rtk-${TARGET}.tar.gz" \
+  && echo "${SHA}  /tmp/rtk.tar.gz" | sha256sum -c - \
   && tar -xzf /tmp/rtk.tar.gz -C /tmp \
   && install -m 0755 /tmp/rtk /usr/local/bin/rtk \
   && rm -rf /tmp/rtk.tar.gz /tmp/rtk \
   && rtk --version
 
-# pi ??? pinned; update-pi-sandbox.sh bumps this and rebuilds the image.
+# pi — pinned; update-pi-sandbox.ps1 bumps this and rebuilds the image.
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.3.0
 
 WORKDIR /workspace

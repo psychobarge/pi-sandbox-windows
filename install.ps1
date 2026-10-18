@@ -1,27 +1,14 @@
 ﻿# pi-sandbox setup on Windows (Docker Desktop). Run from PowerShell.
 # Usage: .\install.ps1
 $ErrorActionPreference = 'Stop'
-Set-Location $PSScriptRoot
+$PSNativeCommandArgumentPassing = 'Legacy'  # PS 7.3+: keep the 5.1 quoting Q() relies on
+. (Join-Path $PSScriptRoot 'lib\pi-sandbox.ps1')
+Push-Location -LiteralPath $PSScriptRoot
+try {
 
-# PS 5.1 native-arg quoting: args containing spaces must carry embedded quotes
-function Q([string]$a) { if ($a -match ' ') { return '"' + $a + '"' } else { return $a } }
-function Test-Docker {
-  # PS 5.1: with $ErrorActionPreference='Stop', native stderr (docker down) throws
-  # even with 2>$null — catch it so a stopped Docker just returns $false.
-  try {
-    $out = docker version --format '{{.Server.Version}}' 2>$null | Out-String
-  } catch { return $false }
-  return ($LASTEXITCODE -eq 0) -and -not [string]::IsNullOrWhiteSpace($out)
-}
-
-# ====== Extensions to install ======
-$EXTENSIONS = @(
-  'git:github.com/DietrichGebert/ponytail'
-  'npm:pi-web-access'
-  'npm:@narumitw/pi-plan-mode'
-  'npm:pi-ask-mode'
-  'npm:pi-llama-cpp'
-)
+# IMAGE / VOLUME / RTK_VOLUME from the same file pi.ps1 reads.
+$CONFIG = Initialize-Config $PSScriptRoot
+. $CONFIG
 
 # ====== 1. Check Docker (Docker Desktop) ======
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -44,70 +31,65 @@ if (-not (Test-Docker)) {
 Write-Host "✓ Docker $(docker version --format '{{.Server.Version}}')"
 
 # ====== 2. Pi image (Node 24 + pi pinned; auto-updated by update-pi-sandbox.ps1) ======
-Write-Host '→ Building pi-sandbox image (Node 24 + latest pi)…'
-docker build -t pi-sandbox -f Dockerfile.pi .
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Host "→ Building $IMAGE image…"
+$ErrorActionPreference = 'Continue'  # docker build writes progress on stderr
+docker build -t $IMAGE -f Dockerfile.pi .
+$built = $LASTEXITCODE
+$ErrorActionPreference = 'Stop'
+if ($built -ne 0) { exit $built }
 Write-Host '✓ Image ready'
 
 # ====== 2b. rtk data volume (persists `rtk gain` history across launches) ======
-docker volume create rtk-data | Out-Null
-Write-Host '✓ rtk-data volume ready'
+Invoke-DockerQuiet volume create $RTK_VOLUME | Out-Null
+Write-Host "✓ $RTK_VOLUME volume ready"
 
 # ====== 3. Model & thinking config (settings.json) ======
+# Seed a fresh volume only: re-running must not wipe packages installed with
+# `!pi install` (they live in this same settings.json).
+# Extensions: pi installs the packages declared in settings.json on first launch.
 Write-Host '→ Installing model config (no default provider, pi asks on first run)…'
-docker run --rm -v 'pi-agent-home:/root/.pi/agent' -v (Q "$PSScriptRoot\config:/config:ro") --entrypoint bash pi-sandbox -c 'mkdir -p /root/.pi/agent && cp -f /config/settings.json /root/.pi/agent/ && echo "✓ Model config installed"'
+docker run --rm -v "${VOLUME}:/root/.pi/agent" -v (Q "$PSScriptRoot\config:/config:ro") --entrypoint bash $IMAGE -c 'mkdir -p /root/.pi/agent && if [ -f /root/.pi/agent/settings.json ]; then echo ''✓ Model config kept (existing extensions preserved)''; else cp /config/settings.json /root/.pi/agent/ && echo ''✓ Model config installed''; fi'
 
-# ====== 4. Extensions (into the persistent pi-agent-home volume) ======
-Write-Host '→ Installing extensions…'
-foreach ($ext in $EXTENSIONS) {
-  Write-Host "   • $ext"
-  docker run --rm -v 'pi-agent-home:/root/.pi/agent' pi-sandbox install $ext
-}
-Write-Host '✓ Extensions installed'
-
-# ====== 5. rtk hook (global pi extension, into the persistent volume) ======
+# ====== 4. rtk hook (global pi extension, into the persistent volume) ======
 Write-Host '→ Installing rtk pi extension (compresses bash output for the agent)…'
-docker run --rm -e RTK_TELEMETRY_DISABLED=1 -v 'pi-agent-home:/root/.pi/agent' --entrypoint bash pi-sandbox -c 'rtk init -g --agent pi'
+docker run --rm -e RTK_TELEMETRY_DISABLED=1 -v "${VOLUME}:/root/.pi/agent" --entrypoint bash $IMAGE -c 'rtk init -g --agent pi --auto-patch'
 Write-Host '✓ rtk extension installed'
 
-# ====== 6. DeepSeek opt-in (default: off) ======
+# ====== 5. DeepSeek opt-in (default: off) ======
 Write-Host ''
 Write-Host 'DeepSeek is NOT installed by default.'
 $want = Read-Host 'Add DeepSeek support (pi-deepseek-peak extension + deepseek model defaults + DEEPSEEK_API_KEY forwarding)? [y/N]'
 if ($want -match '^[yY]') {
-  Write-Host '→ Installing pi-deepseek-peak…'
-  docker run --rm -v 'pi-agent-home:/root/.pi/agent' pi-sandbox install 'git:github.com/psychobarge/pi-deepseek-peak'
-  Write-Host '→ Installing deepseek model config…'
-  docker run --rm -v 'pi-agent-home:/root/.pi/agent' -v (Q "$PSScriptRoot\config:/config:ro") --entrypoint bash pi-sandbox -c 'cp -f /config/settings.deepseek.json /root/.pi/agent/settings.json && echo "✓ DeepSeek model config installed"'
-  $cfg = Get-Content -Raw -LiteralPath .\pi.config.ps1
-  if ($cfg -notmatch 'DEEPSEEK_API_KEY') {
-    $cfg = $cfg.Replace('"OPENAI_API_KEY"', "`"OPENAI_API_KEY`"`r`n  `"DEEPSEEK_API_KEY`"")
-    Set-Content -LiteralPath .\pi.config.ps1 -Value $cfg -Encoding UTF8 -NoNewline
+  # Merge, never overwrite: keeps the extensions already in settings.json.
+  Write-Host '→ Installing deepseek model config (pi installs pi-deepseek-peak from it)…'
+  docker run --rm -v "${VOLUME}:/root/.pi/agent" -v (Q "$PSScriptRoot\config:/config:ro") --entrypoint python3 $IMAGE /config/merge-deepseek-settings.py /root/.pi/agent/settings.json /config/settings.deepseek.json
+  if ($API_KEYS -notcontains 'DEEPSEEK_API_KEY') {
+    [IO.File]::AppendAllText($CONFIG, "`r`n`$API_KEYS += @('DEEPSEEK_API_KEY')   # added by install.ps1`r`n", (New-Object Text.UTF8Encoding $false))
+    $API_KEYS += 'DEEPSEEK_API_KEY'
     Write-Host '✓ DEEPSEEK_API_KEY added to API_KEYS (pi.config.ps1)'
   }
-  $deepseek = $true
 }
 
-# ====== 7. API keys (all optional) ======
+# ====== 6. API keys -> Windows Credential Manager (never setx, never argv) ======
 Write-Host ''
-Write-Host '════════════════════════════════════════════════════════════════'
-Write-Host '  API KEYS — set them with:  setx NAME "value"'
-Write-Host '  (or add to your PowerShell profile: $PROFILE)'
-Write-Host '════════════════════════════════════════════════════════════════'
-if ($deepseek) {
-  Write-Host 'DeepSeek (required to use the deepseek model):'
-  Write-Host ''
-  Write-Host '  setx DEEPSEEK_API_KEY "sk-…"'
-  Write-Host ''
+Write-Host 'API keys are stored in Windows Credential Manager (target "pi-sandbox:<NAME>").'
+foreach ($k in $API_KEYS) {
+  if (Read-StoredKey $k) { Write-Host "  ✓ $k already stored"; continue }
+  $s = Read-Host "  $k (hidden input, Enter to skip)" -AsSecureString
+  if ($s.Length -eq 0) { continue }
+  # A failed write must not stop the install: the launcher below still matters.
+  try { Write-StoredKey $k $s; Write-Host "  ✓ $k stored" }
+  catch { Write-Host "  ⚠ could not store $k ($($_.Exception.Message)) — re-run .\install.ps1 to add it later" }
+  finally { $s.Dispose() }
 }
-Write-Host 'Tavily (optional — web search for pi-web-access):'
-Write-Host ''
-Write-Host '  setx TAVILY_API_KEY "tvly-…"'
-Write-Host ''
-Write-Host 'Then open a NEW terminal (setx does not affect the current one).'
-Write-Host '════════════════════════════════════════════════════════════════'
+foreach ($k in $API_KEYS) {
+  if ([Environment]::GetEnvironmentVariable($k, 'User')) {
+    Write-Host "⚠ $k is also a user env var (setx): it overrides Credential Manager and leaks to every process."
+    Write-Host "   Remove it: [Environment]::SetEnvironmentVariable('$k', `$null, 'User')"
+  }
+}
 
-# ====== 8. Launcher in PATH ======
+# ====== 7. Launcher in PATH ======
 $binDir = Join-Path $HOME '.pi\bin'
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 $shim = Join-Path $binDir 'pi.cmd'
@@ -122,7 +104,7 @@ if (-not $userPath -or $userPath -notlike "*$binDir*") {
   Write-Host "✓ Launcher installed: $shim"
 }
 
-# ====== 8b. Git Bash launcher (`pi` bare command in Git Bash too) ======
+# ====== 7b. Git Bash launcher (`pi` bare command in Git Bash too) ======
 # Cygwin/MSYS2 rule: a file starting with #! is executable without chmod.
 $bashLauncher = Join-Path $binDir 'pi'
 $bashContent = "#!/usr/bin/env bash`n" + 'exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + $PSScriptRoot + '\pi.ps1" "$@"' + "`n"
@@ -135,5 +117,8 @@ Write-Host '  1. Edit pi.config.ps1 (allowed folders, API keys):  notepad pi.con
 Write-Host '  2. cd into one of the allowed folders, then:        pi'
 
 # ====== Retention: keep 30 days ======
+New-Item -ItemType Directory -Force -Path logs | Out-Null
 Get-ChildItem logs -Filter '*.log' -ErrorAction SilentlyContinue |
   Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+} finally { Pop-Location }

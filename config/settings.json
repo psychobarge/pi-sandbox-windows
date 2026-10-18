@@ -1,18 +1,17 @@
 {
   "theme": "dark",
+  "defaultTools": ["+grep", "+find", "+ls"],
   "defaultThinkingLevel": "high",
   "enableInstallTelemetry": false,
-  "hideThinkingBlock": false,
   "compaction": {
     "enabled": false
   },
   "llamaServerUrl": "http://host.docker.internal:8083",
   "packages": [
-    "git:github.com/DietrichGebert/ponytail",
+    "npm:@dietrichgebert/ponytail",
     "npm:pi-web-access",
     "npm:@narumitw/pi-plan-mode",
     "npm:pi-ask-mode",
     "npm:pi-llama-cpp"
-  ],
-  "lastChangelogVersion": "0.84.2"
+  ]
 }
