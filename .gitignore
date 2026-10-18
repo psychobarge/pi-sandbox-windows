@@ -1,0 +1,6 @@
+logs/
+.DS_Store
+
+# real local config (copy of pi.config.example.ps1) — keep personal paths out of git
+pi.config.ps1
+PLAN-*.md
