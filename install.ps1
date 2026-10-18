@@ -50,6 +50,11 @@ Write-Host "✓ $RTK_VOLUME volume ready"
 Write-Host '→ Installing model config (no default provider, pi asks on first run)…'
 docker run --rm -v "${VOLUME}:/root/.pi/agent" -v (Q "$PSScriptRoot\config:/config:ro") --entrypoint bash $IMAGE -c 'mkdir -p /root/.pi/agent && if [ -f /root/.pi/agent/settings.json ]; then echo ''✓ Model config kept (existing extensions preserved)''; else cp /config/settings.json /root/.pi/agent/ && echo ''✓ Model config installed''; fi'
 
+# ====== 3b. Migrate packages installed from git by older versions to npm ======
+# Left in place, the npm copy (settings or DeepSeek merge) loads next to them:
+# duplicate extensions and skill collisions.
+docker run --rm -e PI_SKIP_VERSION_CHECK=1 -v "${VOLUME}:/root/.pi/agent" --entrypoint bash $IMAGE -c 'cd /root/.pi/agent && for p in DietrichGebert/ponytail:@dietrichgebert/ponytail psychobarge/pi-deepseek-peak:pi-deepseek-peak; do g=git:github.com/${p%%:*}; if grep -qF $g settings.json 2>/dev/null; then pi uninstall $g && pi install npm:${p#*:}; fi; done'
+
 # ====== 4. rtk hook (global pi extension, into the persistent volume) ======
 Write-Host '→ Installing rtk pi extension (compresses bash output for the agent)…'
 docker run --rm -e RTK_TELEMETRY_DISABLED=1 -v "${VOLUME}:/root/.pi/agent" --entrypoint bash $IMAGE -c 'rtk init -g --agent pi --auto-patch'
