@@ -15,6 +15,14 @@ All notable changes to this project are documented here.
 - `pi.config.example.ps1` lists every proxied key (commented out).
 
 ### Changed
+- pi now runs as [Pi-Bolt](https://github.com/opensec-git/Pi-Bolt) 1.0.1 (pi
+  1.4.0 compiled ahead of time to native code) instead of the npm
+  `@earendil-works/pi-coding-agent`. Same `~/.pi/agent` volume, settings,
+  sessions and extensions. `Dockerfile.pi` downloads the release tarball and
+  checks `SHA256SUMS` against its Ed25519 signature (release key pinned in the
+  Dockerfile), then the tarball against `SHA256SUMS`. `update-pi-sandbox.ps1`
+  tracks Pi-Bolt's GitHub releases; an image still on stock pi is rebuilt on
+  the next launch. The image sets `PI_SKIP_VERSION_CHECK=1` and `PI_TELEMETRY=0`.
 - `lib/pi-sandbox.ps1` reads the proxied key names from `proxy/keyproxy.mjs`,
   so adding a route no longer needs an edit in the launcher.
   `keyproxy.mjs --selftest` fails if `config/models.json` and the routes

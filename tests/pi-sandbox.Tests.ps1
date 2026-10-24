@@ -166,14 +166,14 @@ Describe 'updater' {
   }
   It 'repins pi and rtk, keeping UTF-8 without BOM' {
     $f = "$TestDrive\Dockerfile.pi"
-    $src = "# image — test`nARG RTK_VERSION=v1.0.1`nARG RTK_SHA256_X86_64=aaa`nARG RTK_SHA256_AARCH64=bbb`nRUN npm install -g @earendil-works/pi-coding-agent@1.3.0`n"
+    $src = "# image — test`nARG RTK_VERSION=v1.0.1`nARG RTK_SHA256_X86_64=aaa`nARG RTK_SHA256_AARCH64=bbb`nARG PIBOLT_VERSION=1.0.0`nARG PIBOLT_SIGNER=k`n"
     Write-Utf8 $f $src
-    Write-Utf8 $f (Update-DockerfilePins (Read-Utf8 $f) '1.4.0' '1.0.2' ('c' * 64) ('d' * 64))
+    Write-Utf8 $f (Update-DockerfilePins (Read-Utf8 $f) '1.0.1' '1.0.2' ('c' * 64) ('d' * 64))
     $bytes = [IO.File]::ReadAllBytes($f)
     $bytes[0] | Should -Not -Be 0xEF
     $t = Read-Utf8 $f
     $t | Should -Match '# image — test'
-    $t | Should -Match 'pi-coding-agent@1\.4\.0'
+    $t | Should -Match "ARG PIBOLT_VERSION=1\.0\.1`nARG PIBOLT_SIGNER=k`n"
     $t | Should -Match "ARG RTK_VERSION=v1\.0\.2`n"
     $t | Should -Match "ARG RTK_SHA256_X86_64=c{64}`n"
     $t | Should -Match "ARG RTK_SHA256_AARCH64=d{64}`n"
@@ -186,9 +186,15 @@ Describe 'updater' {
     $h.X86 | Should -Be ('a' * 64)
     $h.Arm | Should -Be ('b' * 64)
   }
+  It 'reads the Pi-Bolt version from pi --version' {
+    Get-PiBoltVersion '1.4.0 (Pi-Bolt 1.0.1, linux-x64, JIT off)' | Should -Be '1.0.1'
+    Get-PiBoltVersion '1.4.0 (Pi-Bolt 0.8.10, linux-arm64, JIT on)' | Should -Be '0.8.10'
+    Get-PiBoltVersion '1.3.0' | Should -BeNullOrEmpty  # stock pi -> stale -> rebuilt as Pi-Bolt
+  }
   It 'pins match the current Dockerfile.pi format' {
     $t = Read-Utf8 (Join-Path $Repo 'Dockerfile.pi')
     $t | Should -Match '(?m)^ARG RTK_SHA256_X86_64=[0-9a-f]{64}\r?$'
+    $t | Should -Match '(?m)^ARG PIBOLT_VERSION=[0-9][0-9.]*\r?$'
     $t | Should -Match 'sha256sum -c'
   }
 }

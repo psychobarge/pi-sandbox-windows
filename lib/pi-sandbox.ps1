@@ -247,13 +247,19 @@ function Write-Utf8([string]$Path, [string]$Text) { [IO.File]::WriteAllText($Pat
 
 # Pins in Dockerfile.pi; empty/null arguments leave that pin alone.
 function Update-DockerfilePins([string]$Text, [string]$Pi, [string]$Rtk, [string]$ShaX86, [string]$ShaArm) {
-  if ($Pi) { $Text = $Text -replace '@earendil-works/pi-coding-agent@[0-9][0-9.]*', "@earendil-works/pi-coding-agent@$Pi" }
+  if ($Pi) { $Text = $Text -replace '(?m)^ARG PIBOLT_VERSION=.*$', "ARG PIBOLT_VERSION=$Pi" }
   if ($Rtk) {
     $Text = $Text -replace '(?m)^ARG RTK_VERSION=v.*$', "ARG RTK_VERSION=v$Rtk"
     $Text = $Text -replace '(?m)^ARG RTK_SHA256_X86_64=.*$', "ARG RTK_SHA256_X86_64=$ShaX86"
     $Text = $Text -replace '(?m)^ARG RTK_SHA256_AARCH64=.*$', "ARG RTK_SHA256_AARCH64=$ShaArm"
   }
   return $Text
+}
+
+# `pi --version` of Pi-Bolt: "1.4.0 (Pi-Bolt 1.0.1, linux-x64, JIT off)" -> "1.0.1"; $null otherwise
+function Get-PiBoltVersion([string]$Line) {
+  if ($Line -match 'Pi-Bolt ([0-9][0-9.]*),') { return $Matches[1] }
+  return $null
 }
 
 # checksums.txt lines: "<sha256>  <file>"

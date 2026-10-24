@@ -1,4 +1,4 @@
-﻿# Rebuilds the pi-sandbox image when a newer pi or rtk release exists.
+﻿# Rebuilds the pi-sandbox image when a newer Pi-Bolt or rtk release exists.
 # Runs on the host (the container is ephemeral: docker run --rm).
 #   -Status : fast check, prints "up-to-date" or "stale:<what>"
 #   (default): rebuild if stale (started hidden by pi.ps1)
@@ -15,10 +15,10 @@ if (-not $VOLUME) { $VOLUME = 'pi-agent-home' }
 $DOCKERFILE = Join-Path $DIR 'Dockerfile.pi'
 $LOCK = if ($env:PI_UPDATE_LOCK) { $env:PI_UPDATE_LOCK } else { Join-Path $env:TEMP 'pi-sandbox-update.lock' }
 
-function Get-PiLatest {
-  try { (Invoke-RestMethod -Uri 'https://pi.dev/api/latest-version' -TimeoutSec 2).version } catch { $null }
-}
 # /releases/latest skips pre-releases; empty on failure (offline, rate limit) -> never blocks a launch
+function Get-PiLatest {
+  try { "$((Invoke-RestMethod -Uri 'https://api.github.com/repos/opensec-git/Pi-Bolt/releases/latest' -TimeoutSec 2).tag_name)" -replace '^bolt-v', '' } catch { $null }
+}
 function Get-RtkLatest {
   try { "$((Invoke-RestMethod -Uri 'https://api.github.com/repos/rtk-ai/rtk/releases/latest' -TimeoutSec 2).tag_name)".TrimStart('v') } catch { $null }
 }
@@ -26,13 +26,13 @@ function Get-RtkLatest {
 function Get-ImageVersions {
   $lines = @(Invoke-DockerQuiet run --rm --entrypoint bash $IMAGE -c 'pi --version; rtk --version')
   $rtk = if ($lines.Count -ge 2) { (-split $lines[1])[-1] } else { $null }
-  return @{ Pi = $(if ($lines.Count -ge 1) { "$($lines[0])".Trim() }); Rtk = $rtk }
+  return @{ Pi = $(if ($lines.Count -ge 1) { Get-PiBoltVersion "$($lines[0])" }); Rtk = $rtk }
 }
 
 $lp = Get-PiLatest; $lr = Get-RtkLatest
 function Get-StaleLabel($img) {
   $label = @()
-  if ($lp -and $lp -ne $img.Pi) { $label += "pi v$lp" }
+  if ($lp -and $lp -ne $img.Pi) { $label += "pi-bolt v$lp" }
   if ($lr -and $lr -ne $img.Rtk) { $label += "rtk v$lr" }
   return $label -join ' + '
 }
@@ -61,7 +61,7 @@ try {
   # failure a pin stays bumped, but the next launch compares against the image's
   # real version -> still stale -> retry. Self-healing.
   $changed = @(); $piPin = $null; $rtkPin = $null; $h = @{}
-  if ($lp -and $lp -ne $img.Pi) { $piPin = $lp; $changed += "pi v$lp" }
+  if ($lp -and $lp -ne $img.Pi) { $piPin = $lp; $changed += "pi-bolt v$lp" }
   if ($lr -and $lr -ne $img.Rtk) {
     # The tag is movable: pin the tarball hashes with the version. No checksums
     # -> no bump (a version without its hash would fail every rebuild).
@@ -99,7 +99,7 @@ try {
       if ($LASTEXITCODE -ne 0) { Log 'rtk hook refresh failed' }
     }
   } else {
-    Log "build FAILED (pi=$($img.Pi)→$lp, rtk=$($img.Rtk)→$lr) — retry next launch"
+    Log "build FAILED (pi-bolt=$($img.Pi)→$lp, rtk=$($img.Rtk)→$lr) — retry next launch"
   }
 } finally {
   Pop-Location

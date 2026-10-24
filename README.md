@@ -1,7 +1,9 @@
 # pi-sandbox-windows 1.0.0
 
 Run the [pi](https://github.com/earendil-works/pi-mono) coding agent in a
-Docker container on Windows. The agent sees **only the folders you allow** —
+Docker container on Windows, as [Pi-Bolt](https://github.com/opensec-git/Pi-Bolt)
+(pi compiled ahead of time to native code: same commands, sessions and
+extensions, faster and lighter). The agent sees **only the folders you allow** —
 not your user profile, not `~\.ssh`, not your host `~\.pi\agent`, and never
 your API keys. It has limits: see
 [what the sandbox does not protect](#what-the-sandbox-does-not-protect).
@@ -73,6 +75,8 @@ Install them from inside a pi session, then reload:
 ```
 
 Extensions run with the agent's permissions: only install what you trust.
+Pi-Bolt interprets extensions (no JIT): light ones don't notice, heavy ones
+(search, parsing) run slower than on stock pi.
 
 [pi-llama-cpp](https://pi.dev/packages/pi-llama-cpp) is installed by default:
 it reaches a llama.cpp server running on Windows at
@@ -80,8 +84,11 @@ it reaches a llama.cpp server running on Windows at
 
 ## Updates
 
-Automatic. Each launch checks for new pi and rtk releases and rebuilds the
-image in the background; relaunch to use it. To update right away:
+Automatic. Each launch checks for new Pi-Bolt and rtk releases and rebuilds
+the image in the background; relaunch to use it. Inside pi,
+`!pi-bolt update --extensions` updates your extensions (kept in the volume);
+plain `pi-bolt update` updates Pi-Bolt itself and is lost on exit (the container
+is thrown away): leave that to the rebuild. To update right away:
 
 ```powershell
 .\update-pi-sandbox.ps1
@@ -106,6 +113,9 @@ image in the background; relaunch to use it. To update right away:
   providers (Bedrock, Vertex, Azure, Cloudflare) are not proxied yet.
 - **Fewer tokens** — [rtk](https://github.com/rtk-ai/rtk) compresses the output
   of shell commands.
+- **Verified downloads** — the Pi-Bolt tarball is checked against the
+  release's `SHA256SUMS`, itself checked against its Ed25519 signature (key
+  pinned in `Dockerfile.pi`); rtk against pinned SHA-256 hashes.
 
 WSL is not used directly: only Docker Desktop runs its engine there.
 
@@ -120,6 +130,9 @@ WSL is not used directly: only Docker Desktop runs its engine there.
   spending cap on each.
 - **Keys without a proxy route** (anything not in the list above) are passed to the agent as plain env vars. pi warns you at launch.
 - **Never use `/login` in pi**: it saves the key where the agent can read it.
+- **Pi-Bolt is a third-party build** of pi (by OpenSec), not the official
+  package. The signature proves the binary is OpenSec's release, not that it
+  does only what pi does. It runs inside the sandbox and never sees your keys.
 - **Credential Manager is not a vault**: unlike the macOS Keychain, any program
   running under your account can read a generic credential.
 - **Host services** stay reachable through `host.docker.internal` (llama.cpp,

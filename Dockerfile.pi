@@ -29,8 +29,34 @@ RUN case "$(uname -m)" in \
   && rm -rf /tmp/rtk.tar.gz /tmp/rtk \
   && rtk --version
 
-# pi — pinned; update-pi-sandbox.ps1 bumps this and rebuilds the image.
-RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.3.0
+# pi, as Pi-Bolt (https://github.com/opensec-git/Pi-Bolt): pi compiled ahead of
+# time to native code. Pinned; update-pi-sandbox.ps1 bumps this and rebuilds.
+# No hash to pin: SHA256SUMS is checked against its Ed25519 signature (the
+# release key below, as in Pi-Bolt's own installer), then the tarball against
+# SHA256SUMS. The binary needs its sibling files (themes, wasm…): keep the folder.
+# Also linked as `pi-bolt`: the name Pi-Bolt prints in its own hints.
+ARG PIBOLT_VERSION=1.0.1
+ARG PIBOLT_SIGNER=MCowBQYDK2VwAyEAoLboJqtKaoISPqffk03vHZr+1sRBG3uIRIWeKOew+aY=
+RUN case "$(uname -m)" in \
+       x86_64)  TARGET=linux-x64 ;; \
+       aarch64) TARGET=linux-arm64 ;; \
+       *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;; \
+     esac \
+  && B="https://github.com/opensec-git/Pi-Bolt/releases/download/bolt-v${PIBOLT_VERSION}" \
+  && mkdir /tmp/pb && cd /tmp/pb \
+  && curl -fsSL -o SHA256SUMS "$B/SHA256SUMS" -o SHA256SUMS.sig "$B/SHA256SUMS.sig" -o "pi-bolt-$TARGET.tar.gz" "$B/pi-bolt-$TARGET.tar.gz" \
+  && node -e 'const c=require("crypto"),f=require("fs");const k=c.createPublicKey({key:Buffer.from(process.argv[1],"base64"),format:"der",type:"spki"});if(!c.verify(null,f.readFileSync("SHA256SUMS"),k,f.readFileSync("SHA256SUMS.sig"))){console.error("Pi-Bolt: bad SHA256SUMS signature");process.exit(1)}' "$PIBOLT_SIGNER" \
+  && grep -qx "# pi-bolt ${PIBOLT_VERSION}" SHA256SUMS \
+  && grep " pi-bolt-$TARGET.tar.gz\$" SHA256SUMS | sha256sum -c - \
+  && mkdir -p /opt/pi-bolt && tar -xzf "pi-bolt-$TARGET.tar.gz" -C /opt/pi-bolt --strip-components=1 \
+  && ln -s /opt/pi-bolt/pi /usr/local/bin/pi \
+  && ln -s /opt/pi-bolt/pi /usr/local/bin/pi-bolt \
+  && cd / && rm -rf /tmp/pb \
+  && pi --version
+
+# Updates come from rebuilding the image: no pi.dev check, no install telemetry.
+# Never run `pi update` in the container (it would write into a --rm image).
+ENV PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0
 
 WORKDIR /workspace
 ENTRYPOINT ["pi"]
