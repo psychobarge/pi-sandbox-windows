@@ -94,6 +94,19 @@ is thrown away): leave that to the rebuild. To update right away:
 .\update-pi-sandbox.ps1
 ```
 
+### Coming from stock pi
+
+Nothing to do: the first launch sees an image without Pi-Bolt as out of date
+and rebuilds it in the background; relaunch once it is done. The
+`pi-agent-home` volume (settings, sessions, extensions) is used as is. To check
+the install from inside pi: `!pi-bolt doctor`.
+
+To go back to stock pi, check out a commit before the switch, then rebuild:
+
+```powershell
+docker build -t pi-sandbox -f Dockerfile.pi .
+```
+
 ## How it works
 
 - **Isolation** — only the folders in `ALLOWED` are mounted, at their real path
@@ -152,3 +165,5 @@ WSL is not used directly: only Docker Desktop runs its engine there.
 | pi doesn't see a folder | Add it to `ALLOWED`, then relaunch |
 | Provider not authenticated | `cmdkey /list` should show `pi-sandbox:<KEY>` |
 | `pi` not recognized | Open a new terminal, or re-run `.\install.ps1` |
+| `pi-bolt: command not found` inside pi | The image predates Pi-Bolt: run `.\update-pi-sandbox.ps1`, then relaunch |
+| An extension is slow to load | Pi-Bolt interprets extensions: `!pi-bolt doctor` shows each one's load time |

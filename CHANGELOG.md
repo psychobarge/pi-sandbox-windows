@@ -23,6 +23,9 @@ All notable changes to this project are documented here.
   Dockerfile), then the tarball against `SHA256SUMS`. `update-pi-sandbox.ps1`
   tracks Pi-Bolt's GitHub releases; an image still on stock pi is rebuilt on
   the next launch. The image sets `PI_SKIP_VERSION_CHECK=1` and `PI_TELEMETRY=0`.
+  Pi-Bolt is linked as both `pi` and `pi-bolt`, the name its own hints print
+  (`pi-bolt update --extensions`, `pi-bolt doctor`). Extensions are
+  interpreted (no JIT). The image is about 50 MB larger.
 - `lib/pi-sandbox.ps1` reads the proxied key names from `proxy/keyproxy.mjs`,
   so adding a route no longer needs an edit in the launcher.
   `keyproxy.mjs --selftest` fails if `config/models.json` and the routes
